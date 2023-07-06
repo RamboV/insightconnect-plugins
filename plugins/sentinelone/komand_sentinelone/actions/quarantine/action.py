@@ -1,5 +1,7 @@
 import insightconnect_plugin_runtime
-from typing import List
+from typing import List, Dict, Any
+
+import requests
 
 from .schema import QuarantineInput, QuarantineOutput, Input, Output, Component
 from insightconnect_plugin_runtime.exceptions import PluginException
@@ -17,30 +19,40 @@ class Quarantine(insightconnect_plugin_runtime.Action):
         )
 
     def run(self, params={}):
-        agent = params.get(Input.AGENT)
-        case_sensitive = params.get(Input.CASE_SENSITIVE)
-        agents = self.connection.client.search_agents(agent, case_sensitive=case_sensitive, results_length=2)
+        agents = list(set(params.get(Input.AGENT, [])))
         whitelist = params.get(Input.WHITELIST, None)
+        quarantine_state = params.get(Input.QUARANTINE_STATE)
 
-        not_affected = {"data": {"affected": 0}}
+        successful = []
+        failures = []
+        for agent in agents:
+            agents_founds = self.connection.client.search_agents(agent, results_length=2)
 
-        if self.__check_agents_found(agents):
-            self.logger.info(f"No agents found using the host information: {agent}.")
-            return {Output.RESPONSE: not_affected}
+            if not self.__check_agents_found(agents_founds):
+                error = f"No agents found using the host information: {agent}."
+                self.logger.info(error)
+                failures.append(self.__return_failure_details(agent, error))
+                continue
 
-        agent_obj = agents[0]
+            agent_obj = agents_founds[0]
+            payload = {"ids": [agent_obj["id"]]}
 
-        payload = {"ids": [agent_obj["id"]]}
-
-        if params.get(Input.QUARANTINE_STATE):
-            if self.__check_disconnected(agent_obj):
-                self.logger.info(f"Agent: {agent} is already quarantined")
-                return {Output.RESPONSE: not_affected}
-            if whitelist:
-                self.__find_in_whitelist(agent_obj, whitelist)
-            return {Output.RESPONSE: self.connection.agents_action("disconnect", payload)}
-
-        return {Output.RESPONSE: self.connection.agents_action("connect", payload)}
+            try:
+                action_type = "connect"
+                if quarantine_state:
+                    if self.__check_disconnected(agent_obj):
+                        self.logger.info(f"Agent: {agent} is already quarantined")
+                    if whitelist:
+                        self.__find_in_whitelist(agent_obj, whitelist)
+                    action_type = "disconnect"
+                self.connection.agents_action(action_type, payload)
+                successful.append(agent)
+            except (PluginException, requests.HTTPError) as error:
+                failures.append(self.__return_failure_details(agent, str(error)))
+        return {
+            Output.SUCCESSFUL: successful,
+            Output.FAILURES: failures,
+        }
 
     @staticmethod
     def __check_agents_found(agents: list) -> bool:
@@ -49,13 +61,13 @@ class Quarantine(insightconnect_plugin_runtime.Action):
                 cause="Multiple agents found.",
                 assistance="Please provide a unique identifier for the agent to be quarantined.",
             )
-        if len(agents) == 0:
-            return True
-        return False
+        if not agents:
+            return False
+        return True
 
     @staticmethod
     def __check_disconnected(agent_obj: dict) -> bool:
-        if agent_obj["networkStatus"] == "disconnected" or agent_obj["networkStatus"] == "disconnecting":
+        if agent_obj["networkStatus"] in ("disconnected", "disconnecting"):
             return True
         return False
 
@@ -76,3 +88,6 @@ class Quarantine(insightconnect_plugin_runtime.Action):
                 cause="Agent found in the whitelist.",
                 assistance=f"If you would like to block this host, remove {value} from the whitelist and try again.",
             )
+
+    def __return_failure_details(self, agent: str, error: str) -> Dict[str, Any]:
+        return {"input_key": agent, "error": error}

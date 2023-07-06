@@ -3,12 +3,16 @@ extension: plugin
 products: [insightconnect]
 name: sentinelone
 title: SentinelOne
-version: 8.1.0
+version: 9.0.0
 supported_versions: ["2.1.0"]
 description: The SentinelOne plugin allows you to manage and mitigate all your security operations through SentinelOne
 vendor: rapid7
 support: rapid7
 status: []
+sdk:
+  type: full
+  version: 5
+  user: nobody
 resources:
   source_url: https://github.com/rapid7/insightconnect-plugins/tree/master/plugins/sentinelone
   license_url: https://github.com/rapid7/insightconnect-plugins/blob/master/LICENSE
@@ -22,6 +26,17 @@ hub_tags:
   keywords: [sentinelone, endpoint, detection]
   features: []
 types:
+  quarantine_failures:
+    input_key:
+      title: Input Key
+      description: The input key name
+      type: string
+      required: false
+    error:
+      title: Error
+      description: The message describing why the operation has failed
+      type: string
+      required: false
   activities_types:
     id:
       title: Type ID
@@ -2088,17 +2103,17 @@ actions:
         example: '{ "agent": { "accountId": "433241117337583618", "accountName": "SentinelOne", "activeDirectory": { "computerDistinguishedName": "None", "computerMemberOf": [], "lastUserDistinguishedName": "None", "lastUserMemberOf": [] }, "activeThreats": 0, "agentVersion": "4.1.4.82", "allowRemoteShell": false, "appsVulnerabilityStatus": "up_to_date", "cloudProviders": {}, "computerName": "so-agent-win12", "consoleMigrationStatus": "N/A", "coreCount": 1, "cpuCount": 1, "cpuId": "Intel(R) Xeon(R) CPU E5-2690 v2 @ 3.00GHz", "createdAt": "2020-05-28T14:53:03.014660Z", "domain": "WORKGROUP", "encryptedApplications": false, "externalId": "", "externalIp": "198.51.100.100", "firewallEnabled": true, "groupId": "521580416411822676", "groupIp": "198.51.100.x", "groupName": "Default Group", "id": "901345720792880606", "inRemoteShellSession": false, "infected": false, "installerType": ".exe", "isActive": true, "isDecommissioned": false, "isPendingUninstall": false, "isUninstalled": false, "isUpToDate": true, "lastActiveDate": "2020-06-05T18:32:56.748620Z", "lastIpToMgmt": "10.4.24.55", "lastLoggedInUserName": "", "licenseKey": "", "locationEnabled": true, "locationType": "fallback", "locations": [ { "id": "629380164464502476", "name": "Fallback", "scope": "global" } ], "machineType": "server", "mitigationMode": "protect", "mitigationModeSuspicious": "detect", "modelName": "VMware, Inc. - VMware Virtual Platform", "networkInterfaces": [ { "id": "901345720801269215", "inet": [ "198.51.100.100" ], "inet6": [ "2001:db8:8:4::2" ], "name": "Ethernet", "physical": "00:50:56:94:17:08" } ], "networkQuarantineEnabled": false, "networkStatus": "disconnected", "operationalState": "na", "operationalStateExpiration": "None", "osArch": "64 bit", "osName": "Windows Server 2012 Standard", "osRevision": "9200", "osStartTime": "2020-05-28T14:59:36Z", "osType": "windows", "osUsername": "None", "rangerStatus": "NotApplicable", "rangerVersion": "None", "registeredAt": "2020-05-28T14:53:03.010853Z", "remoteProfilingState": "disabled", "remoteProfilingStateExpiration": "None", "scanAbortedAt": "None", "scanFinishedAt": "2020-05-28T22:24:59.420166Z", "scanStartedAt": "2020-05-28T21:12:58.216807Z", "scanStatus": "finished", "siteId": "521580416395045459", "siteName": "Rapid7", "threatRebootRequired": false, "totalMemory": 1023, "updatedAt": "2020-06-05T15:39:10.754112Z", "userActionsNeeded": [], "uuid": "28db47168fa54f89aeed99769ac8d4dc" } }'
   quarantine:
     title: Quarantine
-    description: Isolate (quarantine) endpoint from the network
+    description: Isolate (quarantine) endpoints from the network
     input:
       agent:
         title: Agent
         description: Agent to perform quarantine action on. Accepts IP address, MAC address, hostname, UUID or agent ID
-        type: string
-        example: hostname123
+        type: "[]string"
+        example: '["hostname123", "hostname456"]'
         required: true
       quarantine_state:
         title: Quarantine State
-        description: True to quarantine host, false to unquarantine host
+        description: True to quarantine host, false to unquarantine hosts
         type: boolean
         example: true
         required: true
@@ -2106,22 +2121,21 @@ actions:
         title: Whitelist
         description: This list contains a set of devices that should not be blocked. This can include IPs, hostnames, UUIDs and agent IDs
         type: "[]string"
-        example: ["198.51.100.100", "hostname123", "901345720792880606", "28db47168fa54f89aeed99769ac8d4dc"]
+        example: '["198.51.100.100", "hostname123", "901345720792880606", "28db47168fa54f89aeed99769ac8d4dc"]'
         required: false
-      case_sensitive:
-        title: Case Sensitive
-        description: Looks up the specified Agent in a case-sensitive manner. Setting this value to false may result in longer run times and unintended results
-        type: boolean
-        example: true
-        default: true
-        required: true
     output:
-      response:
-        title: Response
-        description: SentinelOne API call response data
-        type: quarantine_response
-        required: false
-        example: '{ "response": { "data": [ { "agentDomain": "WORKGROUP", "agentGroupId": "123123456712356789", "agentId": "123123456712356789" } } }'
+      successful:
+        title: Successful
+        description: List of hosts on which the operation was successfully attempted (Note this does not guarantee that the operation itself was successful, only that the API call was able to be successfully performed)
+        type: "[]string"
+        required: true
+        example: '["hostname123", "hostname456"]'
+      failures:
+        title: Failure
+        description: List of hosts on which the operation attempt was unsuccessful
+        type: "[]quarantine_failures"
+        required: true
+        example: '[{"input_key": "hostname123", "error": "Example Error Message"}, {"input_key": "hostname456", "error": "Example Error Message 2"}]'
   blacklist:
     title: Blacklist
     description: Blacklist and unblacklist a SHA1 hash
